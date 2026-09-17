@@ -14,7 +14,7 @@ const publishDrawSchema = z.object({ draw_id: z.string().uuid() });
 const updateDrawSchema = z.object({ draw_id: z.string().uuid(), type: z.enum(["random", "algorithmic"]).optional(), number_range_min: z.number().int().min(1).max(44).optional(), number_range_max: z.number().int().min(2).max(45).optional() });
 
 function monthBounds(drawMonth: string) {
-  const start = new Date(`${drawMonth}T00:00:00.000Z`);
+  const start = new Date(`${drawMonth}-01T00:00:00.000Z`);
   const end = new Date(start);
   end.setUTCMonth(end.getUTCMonth() + 1);
   return { start, end };
@@ -27,10 +27,7 @@ async function getEligibleSubscriptions(admin: ReturnType<typeof createAdminClie
   return data ?? [];
 }
 
-function subscriptionPoolAmount(subscriptions: Array<{ unit_amount_minor: number }>) {
-  // The PRD specifies a fixed portion of subscription fees but does not define the percentage.
-  // Phase 7 documents 50% as the implementation assumption. Sum each eligible subscription
-  // individually so mixed monthly/yearly plans are not distorted by an average amount.
+function subscriptionTotalAmount(subscriptions: Array<{ unit_amount_minor: number }>) {
   return subscriptions.reduce((sum, subscription) => sum + Number(subscription.unit_amount_minor || 0), 0);
 }
 
@@ -64,7 +61,9 @@ async function buildSimulation(draw: any, seed?: string): Promise<DrawSimulation
   const config: DrawConfig = { type: draw.type as DrawType, numberRange: { min: draw.number_range_min, max: draw.number_range_max }, count: 5 };
   let drawConfig: DrawConfig | AlgorithmicConfig = config;
   if (draw.type === "algorithmic") drawConfig = prepareAlgorithmicConfig(Array.from(userScores.values()), { min: draw.number_range_min, max: draw.number_range_max }, 5, seed);
-  const prizeConfig: PrizePoolConfig = { currency: "GBP", contributionPercentage: 50, activeSubscriberCount: subscriptions.length, subscriptionAmountMinor: subscriptionPoolAmount(subscriptions), jackpotRolloverInMinor: 0 };
+  // The prize calculator accepts a per-subscriber amount. Passing the exact sum with a
+  // multiplier of one preserves mixed monthly/yearly subscriber amounts without averaging them.
+  const prizeConfig: PrizePoolConfig = { currency: "GBP", contributionPercentage: 50, activeSubscriberCount: 1, subscriptionAmountMinor: subscriptionTotalAmount(subscriptions), jackpotRolloverInMinor: 0 };
   validatePrizeConfig(prizeConfig);
   return engineSimulateDraw(drawConfig, entries, prizeConfig, seed);
 }
@@ -94,8 +93,7 @@ export async function publishDraw(input: z.infer<typeof publishDrawSchema>) {
   const { data: previousDraw } = await admin.from("draws").select("id").eq("draw_month", previousMonth.toISOString().split("T")[0]).eq("status", "published").maybeSingle();
   let jackpotRolloverIn = 0;
   if (previousDraw) { const { data: previousPrizePool } = await admin.from("prize_pools").select("jackpot_rollover_out_minor").eq("draw_id", previousDraw.id).maybeSingle(); jackpotRolloverIn = Number(previousPrizePool?.jackpot_rollover_out_minor || 0); }
-  let finalNumbers = draw.numbers as number[] | null;
-  if (!finalNumbers) { const config: DrawConfig = { type: draw.type as DrawType, numberRange: { min: draw.number_range_min, max: draw.number_range_max }, count: 5 }; finalNumbers = generateDraw(config).numbers; }
+  const finalNumbers = draw.numbers as number[];
   const subscriptions = await getEligibleSubscriptions(admin, draw.draw_month);
   const eligibleUserIds = [...new Set(subscriptions.map((s: any) => s.user_id))];
   const { data: golfScores, error: scoresError } = await admin.from("golf_scores").select("user_id, stableford_score, score_date").in("user_id", eligibleUserIds).order("score_date", { ascending: false });
@@ -111,10 +109,11 @@ export async function publishDraw(input: z.infer<typeof publishDrawSchema>) {
   }
   const matches = calculateMatches(finalNumbers, entries);
   const tierGroups = groupMatchesByTier(matches);
-  const prizeConfig: PrizePoolConfig = { currency: "GBP", contributionPercentage: 50, activeSubscriberCount: subscriptions.length, subscriptionAmountMinor: subscriptionPoolAmount(subscriptions), jackpotRolloverInMinor: jackpotRolloverIn };
+  const prizeConfig: PrizePoolConfig = { currency: "GBP", contributionPercentage: 50, activeSubscriberCount: 1, subscriptionAmountMinor: subscriptionTotalAmount(subscriptions), jackpotRolloverInMinor: jackpotRolloverIn };
   const prizePool = calculatePrizePool(prizeConfig);
   const { winners, updatedPrizePool } = calculateWinners(prizePool, tierGroups);
-  const { data: prizePoolRecord, error: poolError } = await admin.from("prize_pools").upsert({ draw_id: validated.draw_id, currency: prizeConfig.currency, active_subscriber_count: prizeConfig.activeSubscriberCount, subscription_contribution_minor: prizePool.subscriptionContributionMinor, current_contribution_minor: prizePool.subscriptionContributionMinor, jackpot_rollover_in_minor: jackpotRolloverIn, five_match_pool_minor: prizePool.fiveMatchPoolMinor, four_match_pool_minor: prizePool.fourMatchPoolMinor, three_match_pool_minor: prizePool.threeMatchPoolMinor, jackpot_rollover_out_minor: updatedPrizePool.jackpotRolloverOutMinor }, { onConflict: "draw_id" }).select().single();
+  const subscriptionContributionMinor = prizePool.totalPoolMinor - jackpotRolloverIn;
+  const { data: prizePoolRecord, error: poolError } = await admin.from("prize_pools").upsert({ draw_id: validated.draw_id, currency: prizeConfig.currency, active_subscriber_count: subscriptions.length, subscription_contribution_minor: subscriptionContributionMinor, current_contribution_minor: subscriptionContributionMinor, jackpot_rollover_in_minor: jackpotRolloverIn, five_match_pool_minor: prizePool.fiveMatchPoolMinor, four_match_pool_minor: prizePool.fourMatchPoolMinor, three_match_pool_minor: prizePool.threeMatchPoolMinor, jackpot_rollover_out_minor: updatedPrizePool.jackpotRolloverOutMinor }, { onConflict: "draw_id" }).select().single();
   if (poolError) throw new Error(`Failed to create prize pool: ${poolError.message}`);
   for (const match of matches) { const { data: result, error } = await admin.from("draw_results").upsert({ draw_id: validated.draw_id, entry_id: match.entryId, matched_count: match.matchedCount, matched_numbers: match.matchedNumbers }, { onConflict: "entry_id" }).select().single(); if (error) throw new Error(`Failed to create draw result: ${error.message}`); if (result) { const winner = winners.find((w) => w.userId === match.userId); if (winner) { const { error: winnerError } = await admin.from("winners").upsert({ draw_result_id: result.id, user_id: winner.userId, tier: winner.tier, prize_amount_minor: winner.prizeAmountMinor, currency: winner.currency, verification_status: "pending" }, { onConflict: "draw_result_id" }); if (winnerError) throw new Error(`Failed to create winner: ${winnerError.message}`); } } }
   const now = new Date().toISOString();
