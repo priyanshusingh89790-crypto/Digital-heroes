@@ -1,5 +1,6 @@
--- Profile roles are privileged data. Subscriber-facing profile updates must never
--- be able to promote an account to administrator.
+-- Profile roles are privileged data. Authenticated profile updates cannot
+-- promote an account to administrator. Server-side controlled operations remain
+-- possible because auth.uid() is null for service-role requests.
 create or replace function public.prevent_profile_role_change()
 returns trigger
 language plpgsql
@@ -7,8 +8,8 @@ security definer
 set search_path = ''
 as $$
 begin
-  if new.role is distinct from old.role then
-    raise exception 'Profile role changes must be performed through a controlled database operation';
+  if auth.uid() is not null and new.role is distinct from old.role then
+    raise exception 'Profile role changes must be performed through a controlled server operation';
   end if;
   return new;
 end;
@@ -20,4 +21,4 @@ before update on public.profiles
 for each row
 execute function public.prevent_profile_role_change();
 
-comment on column public.profiles.role is 'Privileged role; immutable through normal profile updates. Promote admins through a controlled SQL/database operation.';
+comment on column public.profiles.role is 'Privileged role; authenticated users cannot change it. Controlled server/database operations may promote administrators.';
