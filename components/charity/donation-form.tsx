@@ -13,11 +13,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type DonationHistoryRow = Awaited<ReturnType<typeof getUserDonationsAction>>[number];
-type CharityRelation = DonationHistoryRow["charities"];
 
-function charityName(value: CharityRelation): string {
-  if (Array.isArray(value)) return value[0]?.name ?? "Unknown charity";
-  return value?.name ?? "Unknown charity";
+type CharityNameValue = { name?: string } | Array<{ name?: string }> | null;
+
+function charityName(value: unknown): string {
+  const relation = value as CharityNameValue;
+  if (Array.isArray(relation)) return relation[0]?.name ?? "Unknown charity";
+  return relation?.name ?? "Unknown charity";
 }
 
 export function DonationForm() {
@@ -39,7 +41,7 @@ export function DonationForm() {
         if (!isMounted) return;
         if (charitiesResult.error) setError(charitiesResult.error);
         else setCharities(charitiesResult.charities);
-        setDonationHistory(historyResult.map((item) => ({ id: item.id, amount_minor: item.amount_minor, currency: item.currency, created_at: item.created_at, charities: { name: charityName(item.charities) } })));
+        setDonationHistory(historyResult.map((item: DonationHistoryRow) => ({ id: item.id, amount_minor: item.amount_minor, currency: item.currency, created_at: item.created_at, charities: { name: charityName(item.charities) } })));
       } catch (err) {
         if (isMounted) { setError("Failed to load donation data. Please try again."); console.error(err); }
       } finally { if (isMounted) setIsLoading(false); }
