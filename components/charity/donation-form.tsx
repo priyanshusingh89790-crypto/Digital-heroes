@@ -13,16 +13,17 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type DonationHistoryRow = Awaited<ReturnType<typeof getUserDonationsAction>>[number];
+type CharityRelation = DonationHistoryRow["charities"];
 
-function charityName(value: DonationHistoryRow["charities"]): string {
+function charityName(value: CharityRelation): string {
   if (Array.isArray(value)) return value[0]?.name ?? "Unknown charity";
   return value?.name ?? "Unknown charity";
 }
 
 export function DonationForm() {
   const [charities, setCharities] = useState<PublicCharity[]>([]);
-  const [selectedCharityId, setSelectedCharityId] = useState<string>("");
-  const [amount, setAmount] = useState<string>("");
+  const [selectedCharityId, setSelectedCharityId] = useState("");
+  const [amount, setAmount] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,9 +42,7 @@ export function DonationForm() {
         setDonationHistory(historyResult.map((item) => ({ id: item.id, amount_minor: item.amount_minor, currency: item.currency, created_at: item.created_at, charities: { name: charityName(item.charities) } })));
       } catch (err) {
         if (isMounted) { setError("Failed to load donation data. Please try again."); console.error(err); }
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
+      } finally { if (isMounted) setIsLoading(false); }
     }
     loadData();
     return () => { isMounted = false; };
