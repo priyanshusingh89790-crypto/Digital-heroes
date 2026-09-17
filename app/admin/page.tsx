@@ -1,18 +1,21 @@
 import { redirect } from "next/navigation";
-
+import Link from "next/link";
+import { AdminDashboard } from "./admin-dashboard";
 import { AuthenticationRequiredError, AuthorizationError, requireAdmin } from "@/lib/auth/authorization";
+import { getAdminData, getAdminOverview } from "@/lib/admin/operations";
 
-export default async function AdminAccessPage() {
-  await authorizeAdmin();
-  return <main className="mx-auto max-w-3xl p-8"><h1 className="text-2xl font-semibold">Administrator access confirmed</h1><p className="mt-2 text-muted-foreground">The admin dashboard is scheduled for a later phase.</p></main>;
-}
-
-async function authorizeAdmin() {
+export default async function AdminPage() {
   try {
-    return await requireAdmin();
+    await requireAdmin();
+    const [data, overview] = await Promise.all([getAdminData(), getAdminOverview()]);
+    return <AdminDashboard data={data} overview={overview} />;
   } catch (error) {
     if (error instanceof AuthenticationRequiredError) redirect("/login");
     if (error instanceof AuthorizationError) redirect("/unauthorized");
     throw error;
   }
+}
+
+export function AdminFallbackLink() {
+  return <Link href="/dashboard">Back to dashboard</Link>;
 }
