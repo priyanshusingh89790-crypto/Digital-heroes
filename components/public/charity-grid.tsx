@@ -1,0 +1,6 @@
+"use client";
+import { Search } from "lucide-react";
+import { useMemo, useState } from "react";
+import type { PublicCharity } from "@/lib/public/charities";
+import { CharityCard } from "./charity-card";
+export function CharityGrid({ charities }: { charities: PublicCharity[] }) { const [query, setQuery] = useState(""); const list = useMemo(() => charities.filter((c) => `${c.name} ${c.short_description}`.toLowerCase().includes(query.toLowerCase())), [charities, query]); return <><label className="relative block max-w-md"><span className="sr-only">Search charities</span><Search className="pointer-events-none absolute top-3 left-4 size-4 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} className="h-11 w-full rounded-full border border-slate-300 bg-white pl-10 pr-4 text-sm outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100" placeholder="Search charities" /></label>{list.length ? <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{list.map((charity) => <CharityCard key={charity.id} charity={charity} />)}</div> : <div className="mt-8 rounded-3xl border border-dashed border-slate-300 p-12 text-center text-slate-600">No charities match that search.</div>}</>; }
