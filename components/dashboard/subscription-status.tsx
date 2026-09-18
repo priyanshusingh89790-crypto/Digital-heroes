@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AlertCircle, Calendar, CheckCircle, CreditCard, XCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -38,11 +39,17 @@ export function SubscriptionStatusCard({
             Subscription
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="flex items-center gap-2 text-muted-foreground">
             <XCircle className="h-4 w-4" />
             <span>No active subscription</span>
           </div>
+          <Link
+            href="/pricing"
+            className="inline-flex w-full items-center justify-center rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
+          >
+            Choose a subscription
+          </Link>
         </CardContent>
       </Card>
     );
@@ -129,6 +136,10 @@ export function SubscriptionStatusCard({
             </AlertDescription>
           </Alert>
         )}
+
+        <Link href="/pricing" className="inline-flex w-full items-center justify-center rounded-lg border px-4 py-2.5 text-sm font-semibold transition hover:bg-slate-50">
+          View plans
+        </Link>
       </CardContent>
     </Card>
   );
