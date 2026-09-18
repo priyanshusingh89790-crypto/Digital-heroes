@@ -11,12 +11,27 @@ function redirectToLogin(request: NextRequest, response: NextResponse) {
   return redirect;
 }
 
+function redirectAuthenticatedAuthPage(request: NextRequest, response: NextResponse) {
+  const url = request.nextUrl.clone();
+  url.pathname = "/dashboard";
+  url.search = "";
+  const redirect = NextResponse.redirect(url);
+  response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+  return redirect;
+}
+
 export async function proxy(request: NextRequest) {
   const { response, user } = await updateSession(request);
-  const isProtected = request.nextUrl.pathname.startsWith("/dashboard") || request.nextUrl.pathname.startsWith("/admin");
+  const pathname = request.nextUrl.pathname;
+  const isProtected = pathname.startsWith("/dashboard") || pathname.startsWith("/admin");
+  const isAuthPage = pathname === "/login" || pathname === "/signup";
 
   if (isProtected && !user) {
     return redirectToLogin(request, response);
+  }
+
+  if (isAuthPage && user) {
+    return redirectAuthenticatedAuthPage(request, response);
   }
 
   return response;
