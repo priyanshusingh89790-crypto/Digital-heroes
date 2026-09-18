@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 
@@ -9,6 +10,19 @@ import { loginSchema, signupSchema } from "./validation";
 
 function fields(formData: FormData) {
   return Object.fromEntries(formData.entries());
+}
+
+async function getAppOrigin() {
+  const requestHeaders = await headers();
+  const configured = process.env.NEXT_PUBLIC_APP_URL;
+  if (configured) return configured.replace(/\/$/, "");
+
+  const forwardedHost = requestHeaders.get("x-forwarded-host");
+  const host = forwardedHost ?? requestHeaders.get("host");
+  const protocol = requestHeaders.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "development" ? "http" : "https");
+
+  if (host) return `${protocol}://${host}`;
+  return "http://localhost:3000";
 }
 
 /**
@@ -103,10 +117,14 @@ export async function signupAction(
   }
 
   const supabase = await createClient();
+  const appOrigin = await getAppOrigin();
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
-    options: { data: { full_name: parsed.data.fullName } },
+    options: {
+      data: { full_name: parsed.data.fullName },
+      emailRedirectTo: `${appOrigin}/auth/callback?next=/dashboard`,
+    },
   });
 
   if (error) {
@@ -116,8 +134,6 @@ export async function signupAction(
     };
   }
 
-  // Supabase can intentionally return no error for an already registered
-  // email when email enumeration protection is enabled.
   if (data.user?.identities?.length === 0) {
     return {
       status: "error",
