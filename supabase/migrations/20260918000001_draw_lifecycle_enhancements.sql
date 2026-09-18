@@ -52,19 +52,28 @@ returns trigger
 language plpgsql
 security definer
 set search_path = ''
-as $$
+as $
 begin
-  if old.status = 'published' and new.status = 'published' then
-    if old.numbers is distinct from new.numbers then
-      raise exception 'Cannot modify draw numbers of a published draw';
+  if old.status = 'published' then
+    if new.status not in ('published', 'archived') then
+      raise exception 'A published draw can only remain published or be archived';
     end if;
-    if old.type is distinct from new.type then
-      raise exception 'Cannot modify draw type of a published draw';
+
+    if old.draw_month is distinct from new.draw_month
+      or old.type is distinct from new.type
+      or old.number_range_min is distinct from new.number_range_min
+      or old.number_range_max is distinct from new.number_range_max
+      or old.numbers is distinct from new.numbers
+      or old.simulated_at is distinct from new.simulated_at
+      or old.published_at is distinct from new.published_at
+      or old.algorithm_version is distinct from new.algorithm_version
+      or old.generation_audit is distinct from new.generation_audit then
+      raise exception 'Published draw data is immutable';
     end if;
   end if;
   return new;
 end;
-$$;
+$;
 
 create trigger prevent_published_draw_modification_trigger
 before update on public.draws
