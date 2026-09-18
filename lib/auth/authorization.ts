@@ -5,7 +5,6 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 
 import { canAccessAdminArea, canAccessSubscriberArea, isApplicationRole } from "./roles";
-import { hasActiveSubscription } from "@/lib/billing/access";
 import type { AuthenticatedContext, CurrentProfile } from "./types";
 
 export class AuthenticationRequiredError extends Error {
@@ -81,10 +80,9 @@ export async function requireSubscriber(): Promise<AuthenticatedContext> {
   const context = await requireContext();
 
   if (!canAccessSubscriberArea(context.profile.role)) { throw new AuthorizationError(); }
-  const supabase = await createClient();
-  const { data } = await supabase.from("subscriptions").select("status, current_period_end, cancel_at_period_end, plan_interval").eq("user_id", context.user.id).order("current_period_end", { ascending: false }).limit(1).maybeSingle();
-  if (!hasActiveSubscription(data)) { throw new AuthorizationError("An active subscription is required."); }
-
+  // The dashboard is the subscriber workspace, including subscription status and
+  // checkout. A newly registered user must be able to reach it before purchasing
+  // a subscription; individual paid-only operations enforce subscription access.
   return context;
 }
 
