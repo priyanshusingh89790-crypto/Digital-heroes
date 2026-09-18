@@ -51,7 +51,7 @@ export function DonationForm() {
   }, []);
 
   async function handleCreateDonation() {
-    const parsedAmount = Number(amount);\n    const amountMinor = Math.round(parsedAmount * 100);
+    const parsedAmount = Number(amount);    const amountMinor = Math.round(parsedAmount * 100);
     if (!selectedCharityId) { setError("Please select a charity"); return; }
     if (!Number.isFinite(parsedAmount) || amountMinor < 100) { setError("Minimum donation is £1.00"); return; }
     if (amountMinor > 1000000) { setError("Maximum donation is £10,000.00"); return; }
