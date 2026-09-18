@@ -2,7 +2,6 @@
 
 import { redirect } from "next/navigation";
 
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 import { type AuthFormState } from "./form-state";
@@ -13,32 +12,34 @@ function fields(formData: FormData) {
 }
 
 /**
- * The profile trigger normally creates this row. This fallback makes auth
- * resilient when a Supabase project was created before the latest migrations
- * were applied. It only inserts a missing profile and never changes an
- * existing role.
+ * The database trigger normally creates this row. The authenticated fallback
+ * handles projects where an older Supabase schema did not create the profile.
+ * The RLS policy only permits creating a subscriber profile for the current user.
  */
-async function ensureSubscriberProfile(userId: string, fullName: string | null) {
-  const admin = createAdminClient();
-  const { data: existing, error: lookupError } = await admin
+async function ensureSubscriberProfile(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  fullName: string | null,
+) {
+  const { data: existing, error: lookupError } = await supabase
     .from("profiles")
     .select("id")
     .eq("id", userId)
     .maybeSingle();
 
   if (lookupError) {
-    throw new Error("Unable to verify your account profile.");
+    throw new Error(lookupError.message || "Unable to verify your account profile.");
   }
 
   if (!existing) {
-    const { error } = await admin.from("profiles").insert({
+    const { error } = await supabase.from("profiles").insert({
       id: userId,
       full_name: fullName,
       role: "subscriber",
     });
 
     if (error) {
-      throw new Error("Unable to create your account profile.");
+      throw new Error(error.message || "Unable to create your account profile.");
     }
   }
 }
