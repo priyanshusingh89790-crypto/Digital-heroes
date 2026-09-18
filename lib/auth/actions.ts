@@ -70,6 +70,7 @@ export async function loginAction(
 
   try {
     await ensureSubscriberProfile(
+      supabase,
       data.user.id,
       data.user.user_metadata?.full_name ?? null,
     );
@@ -134,6 +135,7 @@ export async function signupAction(
   if (data.session) {
     try {
       await ensureSubscriberProfile(
+        supabase,
         data.user.id,
         data.user.user_metadata?.full_name ?? parsed.data.fullName,
       );
