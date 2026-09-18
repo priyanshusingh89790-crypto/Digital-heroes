@@ -12,6 +12,6 @@ export async function POST(request: Request) { try {
   const stripe = stripeClient(); const customerId = existing?.stripe_customer_id ?? (await stripe.customers.create({ email: user.email, metadata: { app_user_id: user.id } })).id;
   const price = plan.data === "monthly" ? process.env.STRIPE_MONTHLY_PRICE_ID! : process.env.STRIPE_YEARLY_PRICE_ID!;
   const origin = new URL(request.url).origin;
-  const session = await stripe.checkout.sessions.create({ mode: "subscription", customer: customerId, line_items: [{ price, quantity: 1 }], success_url: `${origin}/pricing?checkout=success`, cancel_url: `${origin}/pricing?checkout=cancelled`, metadata: { app_user_id: user.id, plan: plan.data }, subscription_data: { metadata: { app_user_id: user.id, plan: plan.data } } });
+  const session = await stripe.checkout.sessions.create({ mode: "subscription", customer: customerId, line_items: [{ price, quantity: 1 }], success_url: `${origin}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`, cancel_url: `${origin}/pricing?checkout=cancelled`, metadata: { app_user_id: user.id, plan: plan.data }, subscription_data: { metadata: { app_user_id: user.id, plan: plan.data } } });
   return NextResponse.json({ url: session.url });
 } catch (error) { const status = error instanceof Error && error.name === "AuthenticationRequiredError" ? 401 : 500; return NextResponse.json({ error: status === 401 ? "Please sign in to subscribe." : "Unable to start checkout." }, { status }); } }
