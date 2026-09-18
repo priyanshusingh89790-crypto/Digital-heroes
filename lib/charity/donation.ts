@@ -1,5 +1,6 @@
 import "server-only";
 
+import { headers } from "next/headers";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/authorization";
 import { stripeClient } from "@/lib/billing/stripe";
@@ -13,6 +14,19 @@ const createDonationSchema = z.object({
 
 export type CreateDonationInput = z.infer<typeof createDonationSchema>;
 export type DonationSession = { checkout_url: string; donation_id: string; amount_minor: number; currency: string; charity_id: string };
+
+async function getAppOrigin() {
+  const requestHeaders = await headers();
+  const configured = process.env.NEXT_PUBLIC_APP_URL;
+  if (configured) return configured.replace(/\/$/, "");
+
+  const forwardedHost = requestHeaders.get("x-forwarded-host");
+  const host = forwardedHost ?? requestHeaders.get("host");
+  const protocol = requestHeaders.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "development" ? "http" : "https");
+
+  if (host) return `${protocol}://${host}`;
+  return "http://localhost:3000";
+}
 
 /** Create a one-time donation checkout. Donation totals are counted only after Stripe confirms payment. */
 export async function createDonationCheckout(input: CreateDonationInput): Promise<DonationSession> {
@@ -29,12 +43,13 @@ export async function createDonationCheckout(input: CreateDonationInput): Promis
   if (!charity.is_active) throw new Error("Cannot donate to an inactive charity");
 
   try {
+    const appOrigin = await getAppOrigin();
     const checkoutSession = await stripeClient().checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
       line_items: [{ price_data: { currency: validated.currency.toLowerCase(), product_data: { name: `Donation to ${charity.name}`, description: "One-time charitable donation" }, unit_amount: validated.amount_minor }, quantity: 1 }],
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard?donation=success`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard?donation=cancelled`,
+      success_url: `${appOrigin}/dashboard?donation=success`,
+      cancel_url: `${appOrigin}/dashboard?donation=cancelled`,
       metadata: { user_id: user.id, charity_id: validated.charity_id, donation_type: "one_time", app_donation: "true" },
       customer_email: user.email,
     });
